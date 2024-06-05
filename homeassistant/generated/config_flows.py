@@ -91,6 +91,7 @@ FLOWS = {
         "bthome",
         "buienradar",
         "caldav",
+        "came_domotic",
         "canary",
         "cast",
         "ccm15",
