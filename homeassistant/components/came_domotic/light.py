@@ -11,28 +11,19 @@ from homeassistant.components.light import (
     PLATFORM_SCHEMA,
     ColorMode,
     LightEntity,
-    LightEntityDescription,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_LIGHTS
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from .const import CAME_BASIC_FORM_SCHEMA, LOGGER, utils_normalize_string
+from .const import CAME_BASIC_FORM_SCHEMA, LOGGER
 from .coordinator import CameDataUpdateCoordinator
 from .entity import CameDomoticEntity
 
 # Validation of the user's configuration
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(CAME_BASIC_FORM_SCHEMA)
-
-
-def create_light_entity_descriptor(light_id: str, name: str) -> LightEntityDescription:
-    """Create a light entity description."""
-    return LightEntityDescription(
-        key=f"light_{light_id}_{utils_normalize_string(name)}",
-        has_entity_name=True,
-        name=name,
-    )
 
 
 async def setup_platform(
@@ -52,26 +43,24 @@ async def async_setup_entry(
     """Set up the CAME Domotic platform."""
     coordinator: CameDataUpdateCoordinator = config.runtime_data.coordinator
     came_lights = await coordinator.client.async_get_lights()
-    async_add_entities(CameLight(coordinator, light) for light in came_lights)
+    async_add_entities(CameLight(coordinator, came_light) for came_light in came_lights)
+    coordinator.data[CONF_LIGHTS] = came_lights
 
 
 class CameLight(CameDomoticEntity, LightEntity):
     """Representation of CAME Domotic light device."""
 
+    _attr_has_entity_name = True
+    _attr_name = "camelight"
+
     def __init__(
         self,
         coordinator: CameDataUpdateCoordinator,
-        light: camelib_models.CameLight,
+        came_light: camelib_models.CameLight,
     ) -> None:
         """Initialize an CameLight."""
         # LOGGER.debug("[CameLight] __init__. Light name: %s", light.name)
-        super().__init__(coordinator)
-        self.coordinator: CameDataUpdateCoordinator = coordinator
-        self.entity_description = create_light_entity_descriptor(
-            light.act_id, light.name
-        )
-        self._api_light: camelib_models.CameLight = light
-        self._name: str = light.name
+        super().__init__(coordinator, came_light)
 
     @property
     def name(self) -> str:
@@ -85,19 +74,19 @@ class CameLight(CameDomoticEntity, LightEntity):
         This method is optional. Removing it indicates to Home Assistant
         that brightness is not supported for this light.
         """
-        return self._util_255_to_100(self._api_light.perc) or 100
+        return self._util_255_to_100(self._api_entity.perc) or 100
 
     @property
     def is_on(self) -> bool:
         """Return true if light is on."""
-        return self._api_light.status is camelib_models.LightStatus.ON
+        return self._api_entity.status is camelib_models.LightStatus.ON
 
     @property
     def color_mode(self) -> ColorMode:
         """Return the color mode of the light."""
         return (
             ColorMode.BRIGHTNESS
-            if self._api_light.type == camelib_models.LightType.DIMMER
+            if self._api_entity.type == camelib_models.LightType.DIMMER
             else ColorMode.ONOFF
         )
 
@@ -106,15 +95,20 @@ class CameLight(CameDomoticEntity, LightEntity):
         """Flag supported color modes."""
         return {
             ColorMode.BRIGHTNESS
-            if self._api_light.type == camelib_models.LightType.DIMMER
+            if self._api_entity.type == camelib_models.LightType.DIMMER
             else ColorMode.ONOFF
         }
 
     @property
     def came_id(self) -> int:
         """CAME Domotic ID of the light."""
-        result: int = self._api_light.act_id
+        result: int = self._api_entity.act_id
         return result
+
+    @property
+    def unique_id(self) -> str:
+        """Return a unique ID."""
+        return self.entity_description.key
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Instruct the light to turn on.
@@ -127,14 +121,14 @@ class CameLight(CameDomoticEntity, LightEntity):
             self._name,
             kwargs.get(ATTR_BRIGHTNESS, 100),
         )
-        await self._api_light.async_set_status(
+        await self._api_entity.async_set_status(
             camelib_models.LightStatus.ON,
             self._util_255_to_100(kwargs.get(ATTR_BRIGHTNESS, 100)),
         )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Instruct the light to turn off."""
-        await self._api_light.async_set_status(camelib_models.LightStatus.OFF)
+        await self._api_entity.async_set_status(camelib_models.LightStatus.OFF)
 
     async def async_set_brightness(self, brightness: int) -> None:
         """Set the brightness of the light."""
@@ -145,8 +139,8 @@ class CameLight(CameDomoticEntity, LightEntity):
             brightness,
         )
 
-        await self._api_light.async_set_status(
-            self._api_light.status, self._util_255_to_100(brightness)
+        await self._api_entity.async_set_status(
+            self._api_entity.status, self._util_255_to_100(brightness)
         )
 
     async def async_update(self) -> None:
@@ -156,7 +150,7 @@ class CameLight(CameDomoticEntity, LightEntity):
         """
 
         await self.coordinator.async_refresh()
-        lights = self.coordinator.data.lights
+        lights = self.coordinator.data[CONF_LIGHTS]
 
         # Set self._light to the item in lights that has the same act_id as self._light
         light: CameLight = (
@@ -168,7 +162,7 @@ class CameLight(CameDomoticEntity, LightEntity):
         if not light:
             LOGGER.warning("Light with ID %s not found anymore", self.came_id)
             return
-        self._api_light = light
+        self._api_entity = light
 
     @staticmethod
     def _util_100_to_255(value: int) -> int:

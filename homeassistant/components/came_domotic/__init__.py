@@ -9,12 +9,22 @@ from __future__ import annotations
 import came_domotic_unofficial as camelib
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
+from homeassistant.const import (
+    CONF_DEVICE,
+    CONF_HOST,
+    CONF_PASSWORD,
+    CONF_USERNAME,
+    Platform,
+)
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import aiohttp_client
 
 from .const import DOMAIN, LOGGER
-from .coordinator import CameDataUpdateCoordinator, CameEntryRuntimeData
+from .coordinator import (
+    CameCoordinatorServerInfo,
+    CameDataUpdateCoordinator,
+    CameEntryRuntimeData,
+)
 
 REQUIREMENTS = ["aiohue==1.3.0"]
 
@@ -49,6 +59,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             websession=aiohttp_client.async_get_clientsession(hass),
         ),
     )
+    coordinator.data[CONF_DEVICE] = CameCoordinatorServerInfo(
+        entry.data.get(CONF_DEVICE)
+    )
     LOGGER.debug("Setting up entry %s", entry.title)
 
     # https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
@@ -64,7 +77,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of a CAME Domotic config entry."""
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
+        entry.runtime_data = None
+        if len(hass.data[DOMAIN]) == 0:
+            hass.data.pop(DOMAIN)
+        # await hass.config_entries.async_remove(entry.entry_id)
     return unloaded
 
 
