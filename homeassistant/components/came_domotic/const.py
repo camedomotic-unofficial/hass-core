@@ -32,8 +32,6 @@ FEATURE_DIGITALIN = "digitalin"
 FEATURE_ENERGY = "energy"
 FEATURE_LOADSCTRL = "loadsctrl"
 
-CONF_CAMEDOMOTIC_COORDINATOR = "came_domotic_coordinator"
-
 
 def utils_normalize_string(value: str) -> str:
     """Normalize a string."""
@@ -80,8 +78,8 @@ def get_form_schema(
     )
 
 
-def create_unique_id(username: str, keycode: str) -> str:
-    """Create a unique ID for a config entry.
+def create_entry_unique_id(username: str, keycode: str) -> str:
+    """Create a unique ID for a CAME Domotic config entry.
 
     The unique ID is a combination of the username and host, so that a user can have
     multiple config entries on the same host if the username if different (e.g. if
@@ -96,6 +94,11 @@ def create_unique_id(username: str, keycode: str) -> str:
 
     """
     return f"{username}@{keycode}"
+
+
+def create_entity_unique_id(id, name):
+    """Create a unique ID for a CameDomoticEntity entity."""
+    return f"came_{id}_{utils_normalize_string(name)}"
 
 
 CAME_BASIC_FORM_SCHEMA = {

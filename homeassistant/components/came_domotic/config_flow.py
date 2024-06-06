@@ -9,15 +9,15 @@ import came_domotic_unofficial.errors as camelib_err
 
 from homeassistant import config_entries
 from homeassistant.const import (
+    CONF_DEVICE,
     CONF_HOST,
     CONF_NAME,
     CONF_PASSWORD,
-    CONF_UNIQUE_ID,
     CONF_USERNAME,
 )
 from homeassistant.helpers import aiohttp_client as client
 
-from .const import DOMAIN, LOGGER, create_unique_id, get_form_schema
+from .const import DOMAIN, LOGGER, create_entry_unique_id, get_form_schema
 
 
 @config_entries.HANDLERS.register(DOMAIN)
@@ -46,9 +46,10 @@ class CameDomoticConfigFlow(config_entries.ConfigFlow):
                 LOGGER.debug("[async_create_came_entry] Server info: %s", server_info)
 
                 if server_info:
-                    already_configured_entry = await self.async_set_unique_id(
-                        server_info.keycode
+                    unique_id = create_entry_unique_id(
+                        user_input[CONF_USERNAME], server_info.keycode
                     )
+                    already_configured_entry = await self.async_set_unique_id(unique_id)
                     if already_configured_entry:
                         LOGGER.debug(
                             "[async_create_came_entry] Already configured, aborting"
@@ -63,10 +64,7 @@ class CameDomoticConfigFlow(config_entries.ConfigFlow):
                             CONF_HOST: user_input[CONF_HOST],
                             CONF_USERNAME: user_input[CONF_USERNAME],
                             CONF_PASSWORD: user_input[CONF_PASSWORD],
-                            CONF_UNIQUE_ID: create_unique_id(
-                                user_input[CONF_USERNAME], server_info.keycode
-                            ),
-                            # CONF_MAC: format_mac(server_info.keycode),
+                            CONF_DEVICE: server_info,
                         },
                     )
                 # Consider server_info is None as an unexpected server response,

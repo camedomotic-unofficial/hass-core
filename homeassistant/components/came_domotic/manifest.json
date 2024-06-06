@@ -2,12 +2,11 @@
   "domain": "came_domotic",
   "name": "CAME Domotic",
   "codeowners": ["@camedomotic-unofficial", "@fredericks1982"],
-  "integration_type": "hub",
   "config_flow": true,
-  "iot_class": "local_polling",
-  "requirements": ["came_domotic_unofficial>=1.0.0rc22"],
   "documentation": "https://github.com/camedomotic-unofficial/came_domotic",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
   "issue_tracker": "https://github.com/camedomotic-unofficial/came_domotic/issues",
-  "version": "0.1.0",
-  "loggers": "aiocamedomotic"
+  "loggers": ["aiocamedomotic"],
+  "requirements": ["came_domotic_unofficial==1.0.0rc31"]
 }
