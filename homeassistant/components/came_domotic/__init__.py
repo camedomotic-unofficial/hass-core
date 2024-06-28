@@ -6,25 +6,24 @@ https://github.com/camedomotic-unofficial/came_domotic
 
 from __future__ import annotations
 
-import came_domotic_unofficial as camelib
+import aiocamedomotic as camelib
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    CONF_DEVICE,
-    CONF_HOST,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-    Platform,
-)
+from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import aiohttp_client
 
-from .const import DOMAIN, LOGGER
-from .coordinator import (
-    CameCoordinatorServerInfo,
-    CameDataUpdateCoordinator,
-    CameEntryRuntimeData,
+from .const import (
+    DOMAIN,
+    LOGGER,
+    SERVERINFO_BOARD,
+    SERVERINFO_FEATURES,
+    SERVERINFO_KEYCODE,
+    SERVERINFO_SERIAL,
+    SERVERINFO_SWVER,
+    SERVERINFO_TYPE,
 )
+from .coordinator import CameDataUpdateCoordinator, CameEntryRuntimeData
 
 REQUIREMENTS = ["aiohue==1.3.0"]
 
@@ -47,10 +46,9 @@ PLATFORMS: list[Platform] = [
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up an existing CAME Domotic config entry."""
     hass.data.setdefault(DOMAIN, {})
-    entry.runtime_data = CameEntryRuntimeData()
 
-    # hass.data[DOMAIN][entry.entry_id] = coordinator =
-    entry.runtime_data.coordinator = coordinator = CameDataUpdateCoordinator(
+    LOGGER.debug("Setting up entry %s", entry.title)
+    coordinator: CameDataUpdateCoordinator = CameDataUpdateCoordinator(
         hass=hass,
         client=await camelib.CameDomoticAPI.async_create(
             entry.data.get(CONF_HOST),
@@ -59,28 +57,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             websession=aiohttp_client.async_get_clientsession(hass),
         ),
     )
-    coordinator.data[CONF_DEVICE] = CameCoordinatorServerInfo(
-        entry.data.get(CONF_DEVICE)
-    )
-    LOGGER.debug("Setting up entry %s", entry.title)
+    coordinator.data[SERVERINFO_BOARD] = entry.data.get(SERVERINFO_BOARD)
+    coordinator.data[SERVERINFO_FEATURES] = entry.data.get(SERVERINFO_FEATURES)
+    coordinator.data[SERVERINFO_KEYCODE] = entry.data.get(SERVERINFO_KEYCODE)
+    coordinator.data[SERVERINFO_SERIAL] = entry.data.get(SERVERINFO_SERIAL)
+    coordinator.data[SERVERINFO_SWVER] = entry.data.get(SERVERINFO_SWVER)
+    coordinator.data[SERVERINFO_TYPE] = entry.data.get(SERVERINFO_TYPE)
+
+    entry.runtime_data = CameEntryRuntimeData(coordinator)
 
     # https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
-    await coordinator.async_config_entry_first_refresh()
-
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+    await coordinator.async_config_entry_first_refresh()
 
-    # hass.config_entries.async_update_entry(entry, data=entry.data)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Handle removal of a CAME Domotic config entry."""
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        entry.runtime_data = None
+        data: CameEntryRuntimeData = entry.runtime_data
+        await data.coordinator.client.async_dispose()
         if len(hass.data[DOMAIN]) == 0:
             hass.data.pop(DOMAIN)
-        # await hass.config_entries.async_remove(entry.entry_id)
     return unloaded
 
 

@@ -5,17 +5,17 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
-import came_domotic_unofficial as camelib
-import came_domotic_unofficial.errors as camelib_errors
-import came_domotic_unofficial.models as camelib_models
+import aiocamedomotic as camelib
+import aiocamedomotic.errors as camelib_errors
+import aiocamedomotic.models as camelib_models
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_DEVICE, CONF_LIGHTS
+from homeassistant.const import CONF_LIGHTS
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, FEATURE_LIGHTS, LOGGER
+from .const import DOMAIN, LOGGER, UPDATES_CMD_LIGHTS
 
 
 # https://developers.home-assistant.io/docs/integration_fetching_data#coordinated-single-api-poll-for-data-for-all-entities
@@ -28,33 +28,33 @@ class CameDataUpdateCoordinator(DataUpdateCoordinator):
         self,
         hass: HomeAssistant,
         client: camelib.CameDomoticAPI,
+        *,
+        update_interval: timedelta = timedelta(minutes=1),
     ) -> None:
         """Initialize."""
         super().__init__(
             hass=hass,
             logger=LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(minutes=5),
+            update_interval=update_interval,
         )
         self.client = client
         self.data: CameCoordinatorData = CameCoordinatorData()
 
     async def _async_update_data(self) -> CameCoordinatorData:
         """Update data via library."""
+        LOGGER.debug("[_async_update_data] Updating data")
         try:
-            api = self.client
+            updates: camelib_models.UpdateList = await self.client.async_get_updates()
 
-            # Initialize the server information and features
-            # No need to update since they're a static server configuration
-            self.data[CONF_DEVICE] = self.data[
-                CONF_DEVICE
-            ] or CameCoordinatorServerInfo(await api.async_get_server_info())
-
-            server_info: CameCoordinatorServerInfo | None = self.data.get(CONF_DEVICE)
-
-            # Check whether the feature "lights" is enabled
-            if server_info and FEATURE_LIGHTS in server_info.features:
-                await self._async_update_lights(api)
+            if updates:
+                updates_lights: list[dict] = [
+                    item
+                    for item in updates
+                    if item.get("cmd_name") == UPDATES_CMD_LIGHTS
+                ]
+                if updates_lights:
+                    await self._async_update_lights(updates_lights)
 
             return self.data  # noqa: TRY300
         except camelib_errors.CameDomoticServerNotFoundError as e:
@@ -72,33 +72,50 @@ class CameDataUpdateCoordinator(DataUpdateCoordinator):
             LOGGER.exception("Unexpected error")
             raise UpdateFailed(e) from e
 
-    async def _async_update_lights(self, api: camelib.CameDomoticAPI) -> None:
+    async def _async_update_lights(self, light_updates: list[dict]) -> None:
         """Update lights data."""
 
+        initialized: bool = False
+
         if self.data.get(CONF_LIGHTS):
-            updates_counter: int = 0
-            updates: camelib_models.CameUpdates = await api.async_get_updates()
-            lights: list[camelib_models.CameLight] | None = self.data.get(CONF_LIGHTS)
-            # For each item in the updates.light_updates dictionary, update the
-            # _api_light.raw_data attribute of the corresponding self.data.lights
-            # item, matching on the dictionary key int being equal to the
-            # item.came_id value.
-            if updates.light_updates and lights:
-                for light_id, light_update in updates.light_updates.items():
-                    for light in lights:
-                        if light.came_id == light_id:
-                            light.raw_data = light_update
-                            updates_counter += 1
-            LOGGER.debug(
-                "[_async_update_data] Updated %s light devices",
-                updates_counter,
-            )
-        else:
+            lights: dict[int, camelib_models.Light] | None = self.data.get(CONF_LIGHTS)
+            if lights is not None:
+                initialized = True
+                counter: int = 0
+                for light_update in light_updates:
+                    updated_light_id: int | None = light_update.get("act_id")
+                    if updated_light_id is not None:
+                        updated_light: camelib_models.Light | None = lights.get(
+                            updated_light_id
+                        )
+                        if updated_light:
+                            updated_light = light_update
+                            counter += 1
+                        else:
+                            LOGGER.warning(
+                                "Cannot update light with act_id %s: not found in current lights list",
+                                updated_light_id,
+                            )
+                # self.data[CONF_LIGHTS] = lights
+                LOGGER.debug(
+                    "[_async_update_data] Processed %s light device updates",
+                    counter,
+                )
+        if not initialized:
             # Initialize lights
-            self.data[CONF_LIGHTS] = await api.async_get_lights()
+            init_lights: list[
+                camelib_models.Light
+            ] = await self.client.async_get_lights()
+            # Set self.data[CONF_LIGHTS] as a dictionary with the act_id as the key
+            # and the light object as the value
+
+            lights_list: dict[int, camelib_models.Light] = {
+                light.act_id: light for light in init_lights
+            }
+            self.data[CONF_LIGHTS] = lights_list
             LOGGER.debug(
                 "[_async_update_data] Initialized %s light devices",
-                len(self.data.get(CONF_LIGHTS, list[Any])),
+                len(lights_list) if lights_list else 0,
             )
 
 
@@ -110,29 +127,14 @@ class CameCoordinatorData(dict[str, Any]):
 
 
 class CameEntryRuntimeData:
-    """Class to hold the config entry runtime data."""
+    """Class to hold the config entry runtime data.
 
-    def __init__(self) -> None:
+    It includes the current instance of the coordinator.
+    """
+
+    def __init__(
+        self,
+        coordinator: CameDataUpdateCoordinator,
+    ) -> None:
         """Initialize."""
-        self.coordinator: CameDataUpdateCoordinator
-
-
-class CameCoordinatorServerInfo:
-    """Class to hold server information."""
-
-    def __init__(self, server_info: camelib_models.CameServerInfo) -> None:
-        """Initialize."""
-        self.keycode: str = server_info.keycode
-        self.type: str = server_info.type
-        self.serial: str = server_info.serial
-        self.swver: str = server_info.swver
-        self.board: str = server_info.board
-        self.features: list[str] = server_info.features
-
-    def __str__(self) -> str:
-        """Return the string representation of the server information."""
-        return f"{self.type} (serial: {self.serial}, SW: {self.swver}, HW: {self.board}, features: {self.features})"
-
-    def __repr__(self) -> str:
-        """Return the representation of the server information."""
-        return f"<CameCoordinatorServerInfo {self.__str__()}>"
+        self.coordinator: CameDataUpdateCoordinator = coordinator

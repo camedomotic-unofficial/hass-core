@@ -19,7 +19,7 @@ LOGGER: Logger = getLogger(__name__)
 DOMAIN = "came_domotic"
 NAME = "CAME Domotic"
 VERSION = "0.1.0"
-ATTRIBUTION = ""
+ATTRIBUTION = "CAME Unofficial API team"
 MANUFACTURER = "CAME S.p.A."
 OUI_CAMEBPT = "001CB2"  # MAC Address prefix for BPT S.p.A.
 
@@ -31,6 +31,15 @@ FEATURE_SCENARIOS = "scenarios"
 FEATURE_DIGITALIN = "digitalin"
 FEATURE_ENERGY = "energy"
 FEATURE_LOADSCTRL = "loadsctrl"
+
+UPDATES_CMD_LIGHTS = "light_switch_ind"
+
+SERVERINFO_BOARD = "camesi_board"
+SERVERINFO_FEATURES = "camesi_features"
+SERVERINFO_KEYCODE = "camesi_keycode"
+SERVERINFO_SERIAL = "camesi_serial"
+SERVERINFO_SWVER = "camesi_swver"
+SERVERINFO_TYPE = "camesi_type"
 
 
 def utils_normalize_string(value: str) -> str:

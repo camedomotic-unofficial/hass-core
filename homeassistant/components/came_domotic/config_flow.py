@@ -4,20 +4,25 @@ from __future__ import annotations
 
 from typing import Any
 
-import came_domotic_unofficial as camelib
-import came_domotic_unofficial.errors as camelib_err
+import aiocamedomotic as camelib
+import aiocamedomotic.errors as camelib_err
 
 from homeassistant import config_entries
-from homeassistant.const import (
-    CONF_DEVICE,
-    CONF_HOST,
-    CONF_NAME,
-    CONF_PASSWORD,
-    CONF_USERNAME,
-)
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import aiohttp_client as client
 
-from .const import DOMAIN, LOGGER, create_entry_unique_id, get_form_schema
+from .const import (
+    DOMAIN,
+    LOGGER,
+    SERVERINFO_BOARD,
+    SERVERINFO_FEATURES,
+    SERVERINFO_KEYCODE,
+    SERVERINFO_SERIAL,
+    SERVERINFO_SWVER,
+    SERVERINFO_TYPE,
+    create_entry_unique_id,
+    get_form_schema,
+)
 
 
 @config_entries.HANDLERS.register(DOMAIN)
@@ -64,7 +69,12 @@ class CameDomoticConfigFlow(config_entries.ConfigFlow):
                             CONF_HOST: user_input[CONF_HOST],
                             CONF_USERNAME: user_input[CONF_USERNAME],
                             CONF_PASSWORD: user_input[CONF_PASSWORD],
-                            CONF_DEVICE: server_info,
+                            SERVERINFO_FEATURES: server_info.list,
+                            SERVERINFO_KEYCODE: server_info.keycode,
+                            SERVERINFO_SERIAL: server_info.serial,
+                            SERVERINFO_SWVER: server_info.swver,
+                            SERVERINFO_TYPE: server_info.type,
+                            SERVERINFO_BOARD: server_info.board,
                         },
                     )
                 # Consider server_info is None as an unexpected server response,
