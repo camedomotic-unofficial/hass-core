@@ -16,12 +16,12 @@ from homeassistant.helpers.selector import (
 
 LOGGER: Logger = getLogger(__name__)
 
-DOMAIN = "came_domotic"
-NAME = "CAME Domotic"
-VERSION = "0.1.0"
 ATTRIBUTION = "CAME Unofficial API team"
+DOMAIN = "came_domotic"
 MANUFACTURER = "CAME S.p.A."
+NAME = "CAME Domotic"
 OUI_CAMEBPT = "001CB2"  # MAC Address prefix for BPT S.p.A.
+VERSION = "0.1.0"
 
 # Features supported by the CAME Domotic API
 FEATURE_LIGHTS = "lights"
@@ -31,6 +31,9 @@ FEATURE_SCENARIOS = "scenarios"
 FEATURE_DIGITALIN = "digitalin"
 FEATURE_ENERGY = "energy"
 FEATURE_LOADSCTRL = "loadsctrl"
+
+REQUEST_REFRESH_DELAY = 2.0
+UPDATE_INTERVAL_SECS = 10
 
 UPDATES_CMD_LIGHTS = "light_switch_ind"
 

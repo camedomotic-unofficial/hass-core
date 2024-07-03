@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Coroutine
 from datetime import timedelta
 from typing import Any
 
@@ -12,7 +13,8 @@ import aiocamedomotic.models as camelib_models
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LIGHTS
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryError
+from homeassistant.helpers.debounce import Debouncer
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, LOGGER, UPDATES_CMD_LIGHTS
@@ -29,19 +31,25 @@ class CameDataUpdateCoordinator(DataUpdateCoordinator):
         hass: HomeAssistant,
         client: camelib.CameDomoticAPI,
         *,
-        update_interval: timedelta = timedelta(minutes=1),
+        name: str = DOMAIN,
+        update_interval: timedelta | None = None,
+        request_refresh_debouncer: Debouncer[Coroutine[Any, Any, None]] | None = None,
+        always_update: bool = True,
     ) -> None:
         """Initialize."""
         super().__init__(
             hass=hass,
             logger=LOGGER,
-            name=DOMAIN,
+            name=name,
+            update_method=self.async_update,
             update_interval=update_interval,
+            request_refresh_debouncer=request_refresh_debouncer,
+            always_update=always_update,
         )
         self.client = client
         self.data: CameCoordinatorData = CameCoordinatorData()
 
-    async def _async_update_data(self) -> CameCoordinatorData:
+    async def async_update(self) -> CameCoordinatorData:
         """Update data via library."""
         LOGGER.debug("[_async_update_data] Updating data")
         try:
@@ -54,12 +62,12 @@ class CameDataUpdateCoordinator(DataUpdateCoordinator):
                     if item.get("cmd_name") == UPDATES_CMD_LIGHTS
                 ]
                 if updates_lights:
-                    await self._async_update_lights(updates_lights)
+                    await self.async_update_lights(updates_lights)
 
             return self.data  # noqa: TRY300
         except camelib_errors.CameDomoticServerNotFoundError as e:
             LOGGER.warning("Server not found!")
-            raise ConfigEntryAuthFailed(e) from e
+            raise ConfigEntryError(e) from e
         except camelib_errors.CameDomoticAuthError as e:
             LOGGER.warning("Invalid credentials error: %s", e)
             raise ConfigEntryAuthFailed(e) from e
@@ -72,7 +80,7 @@ class CameDataUpdateCoordinator(DataUpdateCoordinator):
             LOGGER.exception("Unexpected error")
             raise UpdateFailed(e) from e
 
-    async def _async_update_lights(self, light_updates: list[dict]) -> None:
+    async def async_update_lights(self, light_updates: list[dict]) -> None:
         """Update lights data."""
 
         initialized: bool = False

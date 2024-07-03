@@ -6,22 +6,27 @@ https://github.com/camedomotic-unofficial/came_domotic
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import aiocamedomotic as camelib
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import aiohttp_client
+from homeassistant.helpers.debounce import Debouncer
 
 from .const import (
     DOMAIN,
     LOGGER,
+    REQUEST_REFRESH_DELAY,
     SERVERINFO_BOARD,
     SERVERINFO_FEATURES,
     SERVERINFO_KEYCODE,
     SERVERINFO_SERIAL,
     SERVERINFO_SWVER,
     SERVERINFO_TYPE,
+    UPDATE_INTERVAL_SECS,
 )
 from .coordinator import CameDataUpdateCoordinator, CameEntryRuntimeData
 
@@ -56,6 +61,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry.data.get(CONF_PASSWORD),
             websession=aiohttp_client.async_get_clientsession(hass),
         ),
+        name=entry.unique_id or DOMAIN,
+        update_interval=timedelta(seconds=UPDATE_INTERVAL_SECS),
+        request_refresh_debouncer=Debouncer(
+            hass, LOGGER, cooldown=REQUEST_REFRESH_DELAY, immediate=False
+        ),
     )
     coordinator.data[SERVERINFO_BOARD] = entry.data.get(SERVERINFO_BOARD)
     coordinator.data[SERVERINFO_FEATURES] = entry.data.get(SERVERINFO_FEATURES)
@@ -79,6 +89,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         data: CameEntryRuntimeData = entry.runtime_data
         await data.coordinator.client.async_dispose()
+        entry.runtime_data = None
         if len(hass.data[DOMAIN]) == 0:
             hass.data.pop(DOMAIN)
     return unloaded

@@ -210,7 +210,7 @@ aiobafi6==0.9.0
 aiobotocore==2.12.1
 
 # homeassistant.components.came_domotic
-aiocamedomotic==1.0.0a4
+aiocamedomotic==1.0.0b0
 
 # homeassistant.components.comelit
 aiocomelit==0.9.0
