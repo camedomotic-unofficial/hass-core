@@ -53,6 +53,10 @@ class CameDataUpdateCoordinator(DataUpdateCoordinator):
         """Update data via library."""
         LOGGER.debug("[_async_update_data] Updating data")
         try:
+            # Initialize entities if not already done
+            if self.data.get(CONF_LIGHTS) is None:
+                await self.async_update_lights()
+
             updates: camelib_models.UpdateList = await self.client.async_get_updates()
 
             if updates:
@@ -80,24 +84,29 @@ class CameDataUpdateCoordinator(DataUpdateCoordinator):
             LOGGER.exception("Unexpected error")
             raise UpdateFailed(e) from e
 
-    async def async_update_lights(self, light_updates: list[dict]) -> None:
+    async def async_update_lights(
+        self, light_updates: list[dict] | None = None
+    ) -> None:
         """Update lights data."""
 
         initialized: bool = False
 
-        if self.data.get(CONF_LIGHTS):
-            lights: dict[int, camelib_models.Light] | None = self.data.get(CONF_LIGHTS)
-            if lights is not None:
+        if light_updates and self.data.get(CONF_LIGHTS):
+            came_lights: dict[int, camelib_models.Light] | None = self.data.get(
+                CONF_LIGHTS
+            )
+            if came_lights is not None:
                 initialized = True
                 counter: int = 0
-                for light_update in light_updates:
-                    updated_light_id: int | None = light_update.get("act_id")
+                for update in light_updates:
+                    updated_light_id: int | None = update.get("act_id")
                     if updated_light_id is not None:
-                        updated_light: camelib_models.Light | None = lights.get(
+                        came_light: camelib_models.Light | None = came_lights.get(
                             updated_light_id
                         )
-                        if updated_light:
-                            updated_light = light_update
+                        if came_light:
+                            came_light.raw_data = update
+                            self.data[CONF_LIGHTS][updated_light_id] = came_light
                             counter += 1
                         else:
                             LOGGER.warning(
@@ -117,14 +126,17 @@ class CameDataUpdateCoordinator(DataUpdateCoordinator):
             # Set self.data[CONF_LIGHTS] as a dictionary with the act_id as the key
             # and the light object as the value
 
-            lights_list: dict[int, camelib_models.Light] = {
-                light.act_id: light for light in init_lights
-            }
-            self.data[CONF_LIGHTS] = lights_list
-            LOGGER.debug(
-                "[_async_update_data] Initialized %s light devices",
-                len(lights_list) if lights_list else 0,
-            )
+            if init_lights:
+                lights_list: dict[int, camelib_models.Light] = {
+                    light.act_id: light for light in init_lights
+                }
+                self.data[CONF_LIGHTS] = lights_list
+                LOGGER.debug(
+                    "[_async_update_data] Initialized %s light devices",
+                    len(lights_list) if lights_list else 0,
+                )
+            else:
+                LOGGER.info("No lights found in the server")
 
 
 class CameCoordinatorData(dict[str, Any]):

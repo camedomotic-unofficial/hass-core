@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 import aiocamedomotic.models as camelib_models
@@ -37,7 +36,7 @@ def create_entity_descriptor(id: int, name: str) -> EntityDescription:
 
 
 class CameDomoticEntity(CoordinatorEntity):
-    """BlueprintEntity class."""
+    """CameDomoticEntity class."""
 
     _attr_attribution = ATTRIBUTION
 
@@ -101,6 +100,11 @@ class CameLight(CameDomoticEntity, LightEntity):
         """Initialize an CameLight."""
         # LOGGER.debug("[CameLight] __init__. Light name: %s", light.name)
         super().__init__(coordinator, came_light)
+        # self.coordinator = coordinator
+        self._attr_is_on = came_light.status is camelib_models.LightStatus.ON
+        self._attr_brightness = (
+            self._util_100_to_255(came_light.perc) if came_light.perc else 255
+        )
 
     @property
     def name(self) -> str:
@@ -114,7 +118,7 @@ class CameLight(CameDomoticEntity, LightEntity):
         This method is optional. Removing it indicates to Home Assistant
         that brightness is not supported for this light.
         """
-        return self._util_255_to_100(self._api_entity.perc) or 100
+        return self._attr_brightness or 255
 
     @property
     def is_on(self) -> bool:
@@ -156,7 +160,7 @@ class CameLight(CameDomoticEntity, LightEntity):
         You can skip the brightness part if your light does not support
         brightness control.
         """
-        brightness_perc = self._util_255_to_100(kwargs.get(ATTR_BRIGHTNESS, 255))
+        brightness_perc = self._util_255_to_100(kwargs.get(ATTR_BRIGHTNESS))
         LOGGER.debug(
             "[CameLight] async_turn_on. Light name: %s, brightness percentage: %s",
             self._name,
@@ -166,6 +170,10 @@ class CameLight(CameDomoticEntity, LightEntity):
             camelib_models.LightStatus.ON,
             brightness_perc,
         )
+        self._attr_is_on = True
+        if brightness_perc:
+            self._attr_brightness = self._util_100_to_255(brightness_perc)
+        self.async_write_ha_state()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Instruct the light to turn off."""
@@ -174,11 +182,17 @@ class CameLight(CameDomoticEntity, LightEntity):
             self._name,
         )
         await self._api_entity.async_set_status(camelib_models.LightStatus.OFF)
+        self._attr_is_on = False
+        self.async_write_ha_state()
 
     async def async_set_brightness(self, **kwargs: Any) -> None:
         """Set the brightness of the light."""
 
-        brightness_perc = self._util_255_to_100(kwargs.get(ATTR_BRIGHTNESS, 255))
+        # If brightness is not provided, return (nothing to do)
+        if not kwargs.get(ATTR_BRIGHTNESS):
+            return
+
+        brightness_perc = self._util_255_to_100(kwargs.get(ATTR_BRIGHTNESS)) or 255
 
         LOGGER.debug(
             "[CameLight] async_set_brightness. Light name: %s, brightness percentage: %s",
@@ -186,23 +200,31 @@ class CameLight(CameDomoticEntity, LightEntity):
             brightness_perc,
         )
 
-        await self._api_entity.async_set_status(
-            self._api_entity.status, brightness_perc
-        )
+        if brightness_perc > 0:
+            await self._api_entity.async_set_status(
+                camelib_models.LightStatus.ON, brightness_perc
+            )
+            self._attr_is_on = True
+            self._attr_brightness = kwargs.get(ATTR_BRIGHTNESS, 255)
+            self.async_write_ha_state()
+        else:
+            await self._api_entity.async_set_status(camelib_models.LightStatus.OFF)
+            self._attr_is_on = False
+            self.async_write_ha_state()
 
     async def async_update(self) -> None:
         """Fetch new state data for this light.
 
         This is the only method that should fetch new data for Home Assistant.
         """
-        # Waait 3 seconds before updating the light
-        await asyncio.sleep(3)
+        # Wait 3 seconds before updating the light
+        # await asyncio.sleep(3)
 
         await self.coordinator.async_refresh()
         lights = self.coordinator.data[CONF_LIGHTS]
 
         # Set self._light to the item in lights that has the same act_id as self._light
-        light: CameLight = (
+        light: camelib_models.Light = (
             next(light for light in lights if light.act_id == self.came_id)
             if lights
             else None
@@ -212,13 +234,20 @@ class CameLight(CameDomoticEntity, LightEntity):
             LOGGER.warning("Light with ID %s not found anymore", self.came_id)
             return
         self._api_entity = light
+        self._attr_is_on = light.status is camelib_models.LightStatus.ON
+        self._attr_brightness = self._util_100_to_255(light.perc) if light.perc else 255
+        self.async_write_ha_state()
 
     @staticmethod
-    def _util_100_to_255(value: int) -> int:
+    def _util_100_to_255(value: int | None = None) -> int | None:
         """Convert a value from 0-100 to 0-255."""
+        if value is None:
+            return None
         return max(0, min(255, int(value * 255 / 100)))
 
     @staticmethod
-    def _util_255_to_100(value: int) -> int:
+    def _util_255_to_100(value: int | None = None) -> int | None:
         """Convert a value from 0-255 to 0-100."""
+        if value is None:
+            return None
         return max(0, min(100, int(value * 100 / 255)))

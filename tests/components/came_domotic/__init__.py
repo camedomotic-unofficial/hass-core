@@ -1,6 +1,10 @@
 """Tests for the CAME Domotic component."""
 
+from datetime import timedelta
 from unittest.mock import Mock
+
+import aiocamedomotic as camelib
+import pytest
 
 from homeassistant.components.came_domotic.const import (
     DOMAIN,
@@ -11,7 +15,9 @@ from homeassistant.components.came_domotic.const import (
     SERVERINFO_SWVER,
     SERVERINFO_TYPE,
 )
+from homeassistant.components.came_domotic.coordinator import CameDataUpdateCoordinator
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PASSWORD, CONF_USERNAME
+from homeassistant.core import HomeAssistant
 
 FIXTURE_API_SERVER_INFO = Mock(
     keycode="0000FFFF9999AAAA",
@@ -57,3 +63,17 @@ FIXTURE_CONFIG_ENTRY = {
     # "options": {CONF_READ_ONLY: False},
     # "source": config_entries.SOURCE_USER,
 }
+
+
+@pytest.fixture
+def mock_coordinator(
+    hass: HomeAssistant,
+) -> CameDataUpdateCoordinator:
+    """Mock CameDataUpdateCoordinator fixture."""
+    return CameDataUpdateCoordinator(
+        hass=hass,
+        client=camelib.CameDomoticAPI(auth=None),
+        name="DEFAULT_NAME",
+        update_interval=timedelta(seconds=60),
+        always_update=False,
+    )

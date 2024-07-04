@@ -33,6 +33,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up the CAME Domotic platform."""
     coordinator: CameDataUpdateCoordinator = config.runtime_data.coordinator
-    came_lights = await coordinator.client.async_get_lights()
-    async_add_entities(CameLight(coordinator, came_light) for came_light in came_lights)
-    coordinator.data[CONF_LIGHTS] = {light.act_id: light for light in came_lights}
+    api_lights = await coordinator.client.async_get_lights()
+    async_add_entities(CameLight(coordinator, api_light) for api_light in api_lights)
+    coordinator.data[CONF_LIGHTS] = {
+        api_light.act_id: api_light for api_light in api_lights
+    }

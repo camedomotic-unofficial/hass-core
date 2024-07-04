@@ -64,7 +64,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         name=entry.unique_id or DOMAIN,
         update_interval=timedelta(seconds=UPDATE_INTERVAL_SECS),
         request_refresh_debouncer=Debouncer(
-            hass, LOGGER, cooldown=REQUEST_REFRESH_DELAY, immediate=False
+            hass, LOGGER, cooldown=REQUEST_REFRESH_DELAY, immediate=True
         ),
     )
     coordinator.data[SERVERINFO_BOARD] = entry.data.get(SERVERINFO_BOARD)
